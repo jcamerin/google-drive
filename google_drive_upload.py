@@ -41,7 +41,7 @@ def upload_file(service, file_path: str, folder_id: Optional[str] = None) -> str
 
     media = MediaFileUpload(file_path, resumable=True)
 
-    print(f"⬆️  Uploading '{file_name}' to Google Drive...")
+    # print(f"⬆️  Uploading '{file_name}' to Google Drive...")
 
     created = (
         service.files()
@@ -57,15 +57,25 @@ def upload_file(service, file_path: str, folder_id: Optional[str] = None) -> str
     file_id = created["id"]
 
     # Make it "anyone with the link can view"
-    print("🔐 Setting permission: anyone with the link can view...")
-    service.permissions().create(
-        fileId=file_id,
-        body={
-            "type": "anyone",
-            "role": "reader",
-        },
-        fields="id",
-    ).execute()
+    # print("🔐 Setting permission: anyone with the link can view...")
+    # service.permissions().create(
+    #    fileId=file_id,
+    #    body={
+    #        "type": "anyone",
+    #        "role": "reader",
+    #    },
+    #    fields="id",
+    #).execute()
+    # Or make it accessible to a particular person besides the owner
+    #service.permissions().create(
+    #    fileId=file_id,
+    #    body={
+    #        "type": "user",   # or 'domain', 'group' if you want to share only within org
+    #        "role": "reader", # or 'writer'
+    #        "emailAddress": "someone@example.com"  # optional if sharing to a person
+    #    },
+    #    fields="id",
+    #).execute()
 
     link = created.get(
         "webViewLink", f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
@@ -91,7 +101,7 @@ def main():
     if folder_arg:
         # If it looks like a path (has '/'), let find_folder.py resolve it.
         if "/" in folder_arg:
-            print(f"📁 Resolving folder path via find_folder.py: {folder_arg}")
+            # print(f"📁 Resolving folder path via find_folder.py: {folder_arg}")
             folder_id = find_folder_by_path(service, folder_arg, id_only=True)
             if not folder_id:
                 print(f"❌ Folder path not found: {folder_arg}")
@@ -99,14 +109,15 @@ def main():
         else:
             # Otherwise, assume it's already a folder ID (e.g. from find_folder.py --id-only)
             folder_id = folder_arg
-            print(f"📌 Using provided folder ID: {folder_id}")
+            # print(f"📌 Using provided folder ID: {folder_id}")
 
     link = upload_file(service, file_path, folder_id)
 
-    print("\n✅ File uploaded successfully.")
-    print(f"🔗 Shareable link: {link}")
-    if folder_id:
-        print(f"📂 Uploaded into folder (id): {folder_id}")
+    # print("\n✅ File uploaded successfully.")
+    # print(f"🔗 Shareable link: {link}")
+    print(link)
+    # if folder_id:
+        # print(f"📂 Uploaded into folder (id): {folder_id}")
 
 
 if __name__ == "__main__":
