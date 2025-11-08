@@ -24,6 +24,7 @@ from google_drive_auth import get_drive_service
 # Only need Sheets scope now
 SHEETS_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 
@@ -45,6 +46,68 @@ def get_sheets_service():
 
     sheets_service = build("sheets", "v4", credentials=creds)
     return sheets_service
+
+
+def get_sheet_id(service, spreadsheet_id: str, sheet_name: str) -> int:
+    """Return the numeric sheetId for a given sheet name."""
+    spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    for sheet in spreadsheet["sheets"]:
+        if sheet["properties"]["title"] == sheet_name:
+            return sheet["properties"]["sheetId"]
+    raise RuntimeError(f"Sheet named {sheet_name!r} not found in spreadsheet {spreadsheet_id!r}")
+
+
+def set_file_chip(
+    service,
+    spreadsheet_id: str,
+    sheet_id: int,
+    row_index_0_based: int,
+    col_index_0_based: int,
+    file_url: str,
+):
+    """
+    Replace the value in a single cell with a Drive Smart Chip.
+
+    row_index_0_based, col_index_0_based are 0-based grid indices.
+    For example, row 1 col A => (0, 0); row 23 col E => (22, 4).
+    """
+    requests = [
+        {
+            "updateCells": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": row_index_0_based,
+                    "endRowIndex": row_index_0_based + 1,
+                    "startColumnIndex": col_index_0_based,
+                    "endColumnIndex": col_index_0_based + 1,
+                },
+                "rows": [
+                    {
+                        "values": [
+                            {
+                                "userEnteredValue": {"stringValue": "@"},  # chip placeholder
+                                "chipRuns": [
+                                    {
+                                        "chip": {
+                                            "richLinkProperties": {
+                                                "uri": file_url,
+                                            }
+                                        }
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
+                "fields": "userEnteredValue,chipRuns",
+            }
+        }
+    ]
+
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": requests},
+    ).execute()
 
 
 def append_to_group(
@@ -90,9 +153,33 @@ def append_to_group(
 
     updates = result.get("updates", {})
     updated_cells = updates.get("updatedCells", 0)
-    updated_range = updates.get("updatedRange", "UNKNOWN")
+    updated_range = updates.get("updatedRange", "UNKNOWN") # Example: "'2025'!A47:F47"
 
+    # Example: Appended 1 row (6 cells) into range: '2025'!A47:F47
     print(f"Appended 1 row ({updated_cells} cells) into range: {updated_range}")
+
+
+    # Split off the sheet name and get row number
+    _, a1_range = updated_range.split("!")
+    start_a1 = a1_range.split(":")[0]   # "A23"
+    row_number_str = "".join(ch for ch in start_a1 if ch.isdigit())  # "23"
+    row_index_0_based = int(row_number_str) - 1  # GridRange uses 0-based indices
+
+
+    # Get the numeric sheetId for the sheeet_name within the spreadsheet
+    sheet_id = get_sheet_id(sheets_service, spreadsheet_id, sheet_name)
+
+    # Column E (Receipt) is index 4 (0-based)
+    set_file_chip(
+        service=sheets_service,
+        spreadsheet_id=spreadsheet_id,
+        sheet_id=sheet_id,
+        row_index_0_based=row_index_0_based,
+        col_index_0_based=4,
+        file_url=receipt)
+    print(f"Inserted SmartChip at (sheet {sheet_name}) (row {row_number_str}) (column E index {4})")
+
+    return updated_range
 
 
 def find_header_row_by_name(sheets_service, spreadsheet_id, sheet_name, group_name):
